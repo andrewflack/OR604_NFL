@@ -128,9 +128,71 @@ for row in b:
 
 #print(division)
 
+# Dictionary - slot priority
+sqlString = """
+            SELECT slot, slot_score
+            FROM slot_priority
+            """
+
+myCursor.execute(sqlString)
+
+b = myCursor.fetchall()
+
+#for row in b:
+#    print row[0], row[1]
+#
+#print '\n\n'
+
+slot_priority = {}
+for row in b:
+    if row[0] not in slot_priority:
+        slot_priority[row[0]] = row[1]
+        
+# Dictionary - team priority
+sqlString = """
+            SELECT team, team_score
+            FROM team_priority
+            """
+
+myCursor.execute(sqlString)
+
+b = myCursor.fetchall()
+
+#for row in b:
+#    print row[0], row[1]
+#
+#print '\n\n'
+
+team_priority = {}
+for row in b:
+    if row[0] not in team_priority:
+        team_priority[row[0]] = row[1]
+    
+# Dictionary - week priority
+sqlString = """
+            SELECT week, week_score
+            FROM week_priority
+            """
+
+myCursor.execute(sqlString)
+
+b = myCursor.fetchall()
+
+#for row in b:
+#    print row[0], row[1]
+#
+#print '\n\n'
+
+week_priority = {}
+for row in b:
+    if row[0] not in week_priority:
+        week_priority[row[0]] = row[1]
+
 early_bye = ['ARI', 'CIN', 'CLE', 'DEN', 'SEA', 'STL']
 
 intl_series = {'DET': 8, 'BUF': 7, 'MIA': 4, 'NYJ': 4, 'JAX': 7, 'KC': 8}
+
+slots = ['ThurE', 'ThurL', 'ThurN', 'SatN', 'SunE', 'SunL', 'SunN', 'MonN1', 'MonN2']
 
 myCursor.close()
 myConnection.close()

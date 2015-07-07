@@ -26,18 +26,16 @@ NFL_sched = Model()
 NFL_sched.modelSense = GRB.MAXIMIZE
 NFL_sched.update()
 
-# Prepare data
-
-
 # Create the variable
 games = {}
 
 for h in teams:
     for a in home_games[h]:
         for w in week:
-            games[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, 
-            name = a +'_'+ h + '_' + str(w))
-            
+            for s in slots:
+                games[a,h,w,s] = NFL_sched.addVar(obj = team_priority[h]*team_priority[a]*week_priority[w]*slot_priority[s], vtype = GRB.BINARY, 
+                    name = a +'_'+ h + '_' + str(w) + s)
+                
 NFL_sched.update()
 
 # Create a dictionary to hold contraints
@@ -48,8 +46,8 @@ myConsts = {}
 # 1 - Each game will be played exactly once during the season
 for h in teams:
     for a in home_games[h]:
-        constrName = 'GamePlayedOnce' + a + '_' + h
-        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w] for w in week) <= 1, name = constrName)
+        constrName = 'GamePlayedOnce' + a + '_' + h + '_' + s
+        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for w in week for s in slots) <= 1, name = constrName)
         
 NFL_sched.update()
 
@@ -57,8 +55,8 @@ NFL_sched.update()
 for t in teams:
     for w in week:
         constrName = t + '_PlaysOnceInWeek_'+ str(w)
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,t,w] for a in home_games[t]) + 
-                                                    quicksum(games[t,h,w] for h in away_games[t])) >= 1, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,t,w,s] for a in home_games[t] for s in slots) + 
+                                                    quicksum(games[t,h,w,s] for h in away_games[t] for s in slots)) >= 1, name = constrName)
 
 NFL_sched.update()
 
@@ -67,16 +65,15 @@ NFL_sched.update()
 # be played from week 4 through week 11).
 for h in teams:
     constrName = h + '_BYE_Week4-11'
-    myConsts[constrName] = NFL_sched.addConstr((quicksum(games['BYE',h,w] for w in range(1,4)) + 
-                                                quicksum(games['BYE',h,w] for w in range(12,18))) == 0, name = constrName)
+    myConsts[constrName] = NFL_sched.addConstr((quicksum(games['BYE',h,w,s] for w in range(1,4) for s in slots) + 
+                                                quicksum(games['BYE',h,w,s] for w in range(12,18) for s in slots)) == 0, name = constrName)
 
 NFL_sched.update()
 
 # 4 - No team that had an early BYE week (week 4) the previous season will 
 # have an early BYE (week 4) in the present season
-for e in early_bye:
-    constrName = e + '_HadEarlyBYE'
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',h,4] for h in teams) == 0, name = constrName)
+constrName = 'HadEarlyBYE'
+myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',h,4,s] for h in early_bye for s in slots) == 0, name = constrName)
 
 NFL_sched.update()
 
@@ -84,7 +81,7 @@ NFL_sched.update()
 # following week
 for t in intl_series:
     constrName = t + '_HasByeAfterIntl'
-    myConsts[constrName] = NFL_sched.addConstr(games['BYE',t,intl_series[t] + 1] == 1, name = constrName)
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',t,intl_series[t] + 1,s] for s in slots) >= 1, name = constrName)
 
 NFL_sched.update()
 
@@ -92,7 +89,7 @@ NFL_sched.update()
 # international game 
 for t in intl_series:
     constrName = t + '_HomeBeforeIntl'
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,t,intl_series[t] - 1] for a in home_games[t]) == 1, name = constrName)
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,t,intl_series[t] - 1,s] for a in home_games[t] for s in slots) >= 1, name = constrName)
 
 NFL_sched.update()
 
@@ -106,8 +103,8 @@ for c in division:
                 team2 = division[c][d][t2]
                 for i in range(1,17):
                     constrName = team1 + '_' + team2 + '_NoBackToBack'
-                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w] for w in [i,i+1]) + 
-                                                                quicksum(games[team2,team1,w] for w in [i,i+1])) <= 1, name = constrName)
+                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w,s] for w in [i,i+1] for s in slots) + 
+                                                                quicksum(games[team2,team1,w,s] for w in [i,i+1] for s in slots)) <= 1, name = constrName)
 
 NFL_sched.update()
 
@@ -119,8 +116,9 @@ for c in division:
                 team2 = division[c][d][t2]
                 for i in range(1,16):
                     constrName = team1 + '_BackBYEBack_' + str(i)
-                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w] for w in [i,i+2]) + 
-                                                                quicksum(games[team2,team1,w] for w in [i,i+2]) + games['BYE',team1,i+1]) <= 2, name = constrName)
+                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w,s] for w in [i,i+2] for s in slots) + 
+                                                                quicksum(games[team2,team1,w,s] for w in [i,i+2] for s in slots) + 
+                                                                quicksum(games['BYE',team1,i+1,s] for s in slots)) <= 2, name = constrName)
 
 NFL_sched.update()
 
@@ -132,29 +130,30 @@ for c in division:
                 team2 = division[c][d][t2]
                 for i in range(1,16):
                     constrName = team2 + '_BackBYEBack_' + str(i)
-                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w] for w in [i,i+2]) + 
-                                                                quicksum(games[team2,team1,w] for w in [i,i+2]) + games['BYE',team2,i+1]) <= 2, name = constrName)
+                    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[team1,team2,w,s] for w in [i,i+2] for s in slots) + 
+                                                                quicksum(games[team2,team1,w,s] for w in [i,i+2] for s in slots) + 
+                                                                quicksum(games['BYE',team2,i+1,s] for s in slots)) <= 2, name = constrName)
 
 NFL_sched.update()
 
 # 8 - No team plays 4 home/away games consecutively during the season
 for h in teams:
     for w in range(1,15):
-        constrName = 'NoFourConsecutive_' + h + '_HomeGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w] for a in home_games[h])+
-                                                    quicksum(games[a,h,w+1] for a in home_games[h])+
-                                                    quicksum(games[a,h,w+2] for a in home_games[h])+
-                                                    quicksum(games[a,h,w+3] for a in home_games[h]))<= 3, name = constrName)
+        constrName = 'NoFourConsecutive_' + h + '_' + str(w) + '_HomeGames'
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for a in home_games[h] for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for a in home_games[h] for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for a in home_games[h] for s in slots)+
+                                                    quicksum(games[a,h,w+3,s] for a in home_games[h] for s in slots))<= 3, name = constrName)
 
 NFL_sched.update()
 
 for a in teams:
     for w in range(1,15):
-        constrName = 'NoFourConsecutive_' + h + '_AwayGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w] for h in away_games[a])+
-                                                    quicksum(games[a,h,w+1] for h in away_games[a])+
-                                                    quicksum(games[a,h,w+2] for h in away_games[a])+
-                                                    quicksum(games[a,h,w+3] for h in away_games[a]))<= 3, name = constrName)
+        constrName = 'NoFourConsecutive_' + a + '_' + str(w) + '_AwayGames'
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for h in away_games[a] for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for h in away_games[a] for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for h in away_games[a] for s in slots)+
+                                                    quicksum(games[a,h,w+3,s] for h in away_games[a] for s in slots))<= 3, name = constrName)
 
 NFL_sched.update()
 
@@ -163,18 +162,18 @@ NFL_sched.update()
 for h in teams:
     for w in [1,2,3,15]:
         constrName = 'NoThreeConsecutive_' + h + '_HomeGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w] for a in home_games[h])+
-                                                    quicksum(games[a,h,w+1] for a in home_games[h])+
-                                                    quicksum(games[a,h,w+2] for a in home_games[h]))<= 2, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for a in home_games[h] for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for a in home_games[h] for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for a in home_games[h] for s in slots))<= 2, name = constrName)
 
 NFL_sched.update()
 
 for a in teams:
     for w in [1,2,3,15]:
-        constrName = 'NoFourConsecutive_' + h + '_AwayGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w] for h in away_games[a])+
-                                                    quicksum(games[a,h,w+1] for h in away_games[a])+
-                                                    quicksum(games[a,h,w+2] for h in away_games[a]))<= 2, name = constrName)
+        constrName = 'NoThreeConsecutive_' + h + '_AwayGames'
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for h in away_games[a] for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for h in away_games[a] for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for h in away_games[a] for s in slots))<= 2, name = constrName)
 
 NFL_sched.update()
 
@@ -182,8 +181,8 @@ NFL_sched.update()
 for c in division:
     for d in division[c]:
         constrName = str(c) + '_' + str(d) + '_' + '_Week17DivGame'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[division[c][d][t1],division[c][d][t2],17] for t1 in range(0,3) for t2 in range(t1+1,4)) + 
-                                                    quicksum(games[division[c][d][t2],division[c][d][t1],17] for t1 in range(0,3) for t2 in range(t1+1,4))) >= 2, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[division[c][d][t1],division[c][d][t2],17,s] for t1 in range(0,3) for t2 in range(t1+1,4) for s in slots) + 
+                                                    quicksum(games[division[c][d][t2],division[c][d][t1],17,s] for t1 in range(0,3) for t2 in range(t1+1,4) for s in slots)) >= 2, name = constrName)
 
 NFL_sched.update()
 
@@ -236,5 +235,6 @@ print('')
 for h in teams:
     for a in home_games[h]:
         for w in week:
-            if games[a,h,w].x > 0:
-                print a, h, w, games[a,h,w].x
+            for s in slots:
+                if games[a,h,w,s].x > 0:
+                    print a, h, w, s, games[a,h,w,s].x*team_priority[h]*team_priority[a]*week_priority[w]*slot_priority[s]
