@@ -7,14 +7,6 @@ Author: Andrew Flack
 Copyright: (c) Andrew Flack 2015
 """
 
-"""
-TO DO:
-- clean up constraint names
-- try to reformulate constraints 3-6 to remove equalities
-- constraint 7 introduces zero half cuts
-- constraint family 7 introduces constraints with the same name
-"""
-
 from gurobipy import *
 import build_NFL_data_structures
 
@@ -33,8 +25,8 @@ for h in teams:
     for a in home_games[h]:
         for w in week:
             for s in slots:
-                games[a,h,w,s] = NFL_sched.addVar(obj = team_priority[h]*team_priority[a]*week_priority[w]*slot_priority[s], vtype = GRB.BINARY, 
-                    name = a +'_'+ h + '_' + str(w) + s)
+                games[a,h,w,s] = NFL_sched.addVar(obj = team_priority[h]+team_priority[a]+week_priority[w]+slot_priority[s], 
+                    vtype = GRB.BINARY, ub = 1, name = a +'_'+ h + '_' + str(w) + s)
                 
 NFL_sched.update()
 
@@ -47,7 +39,7 @@ myConsts = {}
 for h in teams:
     for a in home_games[h]:
         constrName = 'GamePlayedOnce' + a + '_' + h + '_' + s
-        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for w in week for s in slots) <= 1, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for w in week for s in slots) == 1, name = constrName)
         
 NFL_sched.update()
 
@@ -56,40 +48,65 @@ for t in teams:
     for w in week:
         constrName = t + '_PlaysOnceInWeek_'+ str(w)
         myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,t,w,s] for a in home_games[t] for s in slots) + 
-                                                    quicksum(games[t,h,w,s] for h in away_games[t] for s in slots)) >= 1, name = constrName)
+                                                    quicksum(games[t,h,w,s] for h in away_games[t] for s in slots)) == 1, name = constrName)
 
 NFL_sched.update()
 
 # 3 - BYE games can only happen during weeks 4 through the week before 
 # Thanksgiving. In 2015, Thanksgiving is week 12, therefore BYE games can only 
-# be played from week 4 through week 11).
+# be played from week 4 through week 11). And BYE games can only happen 
+# during SunE slot.
+constrName = 'BYE_SunE'
+myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',h,w,s] for s in slots if s != 'SunE' for h in teams for w in week) <= 0, name = constrName)
+
+NFL_sched.update()        
+
 for h in teams:
     constrName = h + '_BYE_Week4-11'
-    myConsts[constrName] = NFL_sched.addConstr((quicksum(games['BYE',h,w,s] for w in range(1,4) for s in slots) + 
-                                                quicksum(games['BYE',h,w,s] for w in range(12,18) for s in slots)) == 0, name = constrName)
+    myConsts[constrName] = NFL_sched.addConstr((quicksum(games['BYE',h,w,'SunE'] for w in range(1,4)) + 
+                                                quicksum(games['BYE',h,w,'SunE'] for w in range(12,18))) <= 0, name = constrName)
 
 NFL_sched.update()
 
 # 4 - No team that had an early BYE week (week 4) the previous season will 
 # have an early BYE (week 4) in the present season
 constrName = 'HadEarlyBYE'
-myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',h,4,s] for h in early_bye for s in slots) == 0, name = constrName)
+myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',h,4,s] for h in early_bye for s in slots) <= 0, name = constrName)
 
 NFL_sched.update()
 
 # 5 - Teams having an international game will have their BYE game the 
 # following week
-for t in intl_series:
-    constrName = t + '_HasByeAfterIntl'
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',t,intl_series[t] + 1,s] for s in slots) >= 1, name = constrName)
+for w in intl_series:
+    constrName = str(w) + '_ByeAfterIntl_away'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',intl_series[w][0],w + 1,s] for s in slots) >= 1, name = constrName)
+
+NFL_sched.update()
+
+for w in intl_series:
+    constrName = str(w) + '_ByeAfterIntl_home'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games['BYE',intl_series[w][1],w + 1,s] for s in slots) >= 1, name = constrName)
 
 NFL_sched.update()
 
 # 6 - Teams playing an international game will be at home the week before the 
 # international game 
-for t in intl_series:
-    constrName = t + '_HomeBeforeIntl'
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,t,intl_series[t] - 1,s] for a in home_games[t] for s in slots) >= 1, name = constrName)
+for w in intl_series:
+    constrName = str(w) + '_HomeBeforeIntl_away'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,intl_series[w][0],w-1,s] for a in home_games[intl_series[w][0]] for s in slots) >= 1, name = constrName)
+
+NFL_sched.update()
+
+for w in intl_series:
+    constrName = str(w) + '_HomeBeforeIntl_home'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,intl_series[w][1],w-1,s] for a in home_games[intl_series[w][1]] for s in slots) >= 1, name = constrName)
+
+NFL_sched.update()
+
+# 6a - International series games are correct
+for w in intl_series:
+    constrName = str(w) + '_IntlGame'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[intl_series[w][0],intl_series[w][1],w,s] for s in slots) >= 1, name = constrName)
 
 NFL_sched.update()
 
@@ -162,18 +179,18 @@ NFL_sched.update()
 for h in teams:
     for w in [1,2,3,15]:
         constrName = 'NoThreeConsecutive_' + h + '_HomeGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for a in home_games[h] for s in slots)+
-                                                    quicksum(games[a,h,w+1,s] for a in home_games[h] for s in slots)+
-                                                    quicksum(games[a,h,w+2,s] for a in home_games[h] for s in slots))<= 2, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for a in home_games[h] if a != 'BYE' for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for a in home_games[h] if a != 'BYE' for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for a in home_games[h] if a != 'BYE' for s in slots))<= 2, name = constrName)
 
 NFL_sched.update()
 
 for a in teams:
     for w in [1,2,3,15]:
         constrName = 'NoThreeConsecutive_' + h + '_AwayGames'
-        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for h in away_games[a] for s in slots)+
-                                                    quicksum(games[a,h,w+1,s] for h in away_games[a] for s in slots)+
-                                                    quicksum(games[a,h,w+2,s] for h in away_games[a] for s in slots))<= 2, name = constrName)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for h in away_games[a] if a != 'BYE' for s in slots)+
+                                                    quicksum(games[a,h,w+1,s] for h in away_games[a] if a != 'BYE' for s in slots)+
+                                                    quicksum(games[a,h,w+2,s] for h in away_games[a] if a != 'BYE' for s in slots))<= 2, name = constrName)
 
 NFL_sched.update()
 
@@ -195,15 +212,34 @@ NFL_sched.update()
 # Rosh Hashanah
 
 # 13 - There are two Monday night games on week 1
+constrName = 'TwoMonNWeek1'
+myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,1,'MonN2'] for h in teams for a in home_games[h]) >= 2, name = constrName)
+
+NFL_sched.update()
 
 # 14 - There is only one Monday night game during weeks 2 through 16
+for w in range(2,17):
+    constrName = 'OneMonNWeek2-16' + '_' + str(w)
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,'MonN1'] for h in teams for a in home_games[h]) >= 1, name = constrName)
+
+NFL_sched.update()
 
 # 15 - The home team for the late Monday night game on week 1 will be a team 
 # one of the following five teams (ARI, SD, SF, OAK, SEA)
 
 # 16 - There is only one Thursday night game during weeks 1 through 16
+for w in range(1,17):
+    constrName = 'OneThursWeek1-16' + '_' + str(w)
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,'ThurN'] for h in teams for a in home_games[h]) >= 1, name = constrName)
+
+NFL_sched.update()
 
 # 17 - There is only one Sunday night game scheduled during weeks 1 through 16
+for w in range(1,17):
+    constrName = 'OneSunNWeek1-16' + '_' + str(w)
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,'SunN'] for h in teams for a in home_games[h]) == 1, name = constrName)
+
+NFL_sched.update()
 
 # 18 - There will be two Saturday Night games, one each night in weeks 15 
 # and 16 (The Saturday rule depends on how many Saturdays there are in 
@@ -213,6 +249,10 @@ NFL_sched.update()
 # and one late - that happen during week 16).
 
 # 19 - Superbowl champion opens the season at home on Thursday night of week 1
+constrName = 'ChampOpensThurN'
+myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,SBchamp,1,'ThurN'] for a in home_games[SBchamp]) >= 1, name = constrName)
+
+NFL_sched.update()
 
 # 20 - There are two Thanksgiving Day games: DET hosts the early game and 
 # DAL hosts the late game.  (The networks alternate each year who gets the 
@@ -227,6 +267,9 @@ NFL_sched.write('NFL_sched.lp')
 # Solve the optimization model
 NFL_sched.optimize()
 
+#NFL_sched.computeIIS()
+#NFL_sched.write('IIS.ilp')
+
 # Extract the solution
 NFL_sched.write('NFL_sched.sol')
 
@@ -237,4 +280,5 @@ for h in teams:
         for w in week:
             for s in slots:
                 if games[a,h,w,s].x > 0:
-                    print a, h, w, s, games[a,h,w,s].x*team_priority[h]*team_priority[a]*week_priority[w]*slot_priority[s]
+                    print a, h, w, s, games[a,h,w,s].x*team_priority[h]+team_priority[a]+week_priority[w]+slot_priority[s]
+                            

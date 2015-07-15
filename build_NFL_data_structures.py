@@ -190,9 +190,12 @@ for row in b:
 
 early_bye = ['ARI', 'CIN', 'CLE', 'DEN', 'SEA', 'STL']
 
-intl_series = {'DET': 8, 'BUF': 7, 'MIA': 4, 'NYJ': 4, 'JAX': 7, 'KC': 8}
+#intl_series = {'DET': 8, 'BUF': 7, 'MIA': 4, 'NYJ': 4, 'JAX': 7, 'KC': 8}
+intl_series = {8: ('DET', 'KC'), 7: ('BUF', 'JAX'), 4: ('NYJ', 'MIA')}
 
 slots = ['ThurE', 'ThurL', 'ThurN', 'SatN', 'SunE', 'SunL', 'SunN', 'MonN1', 'MonN2']
+
+SBchamp = 'NE'
 
 myCursor.close()
 myConnection.close()
