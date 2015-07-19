@@ -178,24 +178,25 @@ myCursor.execute(sqlString)
 
 b = myCursor.fetchall()
 
-#for row in b:
-#    print row[0], row[1]
-#
-#print '\n\n'
-
 week_priority = {}
 for row in b:
     if row[0] not in week_priority:
         week_priority[row[0]] = row[1]
 
+# Misc structures
 early_bye = ['ARI', 'CIN', 'CLE', 'DEN', 'SEA', 'STL']
 
-#intl_series = {'DET': 8, 'BUF': 7, 'MIA': 4, 'NYJ': 4, 'JAX': 7, 'KC': 8}
 intl_series = {8: ('DET', 'KC'), 7: ('BUF', 'JAX'), 4: ('NYJ', 'MIA')}
 
 slots = ['ThurE', 'ThurL', 'ThurN', 'SatN', 'SunE', 'SunL', 'SunN', 'MonN1', 'MonN2']
 
 SBchamp = 'NE'
+
+MonN2week1 = ['ARI', 'SD', 'SF', 'OAK', 'SEA']
+
+late_slots = ['ThurL', 'ThurN', 'SatN', 'SunL', 'SunN', 'MonN1', 'MonN2']
+
+jewish_holiday_weeks = [1]
 
 myCursor.close()
 myConnection.close()
