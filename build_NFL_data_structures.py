@@ -128,6 +128,21 @@ for row in b:
 
 #print(division)
 
+# Dictionary - timezones
+sqlString = """
+            SELECT team, tz 
+            FROM team_info
+            """
+
+myCursor.execute(sqlString)
+
+b = myCursor.fetchall()
+
+timezones = {}
+for row in b:
+	if row[0] not in timezones:
+		timezones[row[0]] = row[1]
+
 # Dictionary - slot priority
 sqlString = """
             SELECT slot, slot_score
@@ -188,7 +203,7 @@ early_bye = ['ARI', 'CIN', 'CLE', 'DEN', 'SEA', 'STL']
 
 intl_series = {8: ('DET', 'KC'), 7: ('BUF', 'JAX'), 4: ('NYJ', 'MIA')}
 
-slots = ['ThurE', 'ThurL', 'ThurN', 'SatN', 'SunE', 'SunL', 'SunN', 'MonN1', 'MonN2']
+slots = ['ThurE', 'ThurL', 'ThurN', 'SatN', 'SunE', 'SunL', 'SunM', 'SunN', 'MonN1', 'MonN2']
 
 SBchamp = 'NE'
 
