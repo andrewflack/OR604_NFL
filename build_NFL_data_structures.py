@@ -142,6 +142,25 @@ timezones = {}
 for row in b:
 	if row[0] not in timezones:
 		timezones[row[0]] = row[1]
+  
+# Dictionary - home_blocks
+sqlString = """
+            SELECT team, week, blocked_time_slot
+            FROM stadium_blocks
+            WHERE blocked_loc == 'home'
+            """
+
+myCursor.execute(sqlString)
+
+b = myCursor.fetchall()
+
+home_blocks = {}
+for row in b:
+    if row[0] not in home_blocks:
+        home_blocks[row[0]] = {}
+    if row[1] not in home_blocks[row[0]]:
+        home_blocks[row[0]][row[1]] = []
+    home_blocks[row[0]][row[1]].append(row[2])
 
 # Dictionary - slot priority
 sqlString = """
@@ -212,6 +231,8 @@ MonN2week1 = ['ARI', 'SD', 'SF', 'OAK', 'SEA']
 late_slots = ['ThurL', 'ThurN', 'SatN', 'SunL', 'SunN', 'MonN1', 'MonN2']
 
 jewish_holiday_weeks = [1]
+
+FL_teams = ['JAX', 'TB', 'MIA']
 
 myCursor.close()
 myConnection.close()

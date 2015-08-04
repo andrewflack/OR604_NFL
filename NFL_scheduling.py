@@ -30,23 +30,49 @@ for h in teams:
                 
 NFL_sched.update()
 
-Y = {}
+Y_BYE = {}
 
 for h in teams:
     for a in home_games[h]:
         for w in week:
-            Y[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'Y_' + a +'_'+ h + '_' + str(w))
+            Y_BYE[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'Y_BYE_' + a +'_'+ h + '_' + str(w))
 
 NFL_sched.update()
 
-SW = {}
+Y_SW = {}
 
 for h in teams:
     for a in home_games[h]:
         for w in week:
-            SW[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'SW_' + a +'_'+ h + '_' + str(w))
+            Y_SW[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'Y_SW_' + a +'_'+ h + '_' + str(w))
 
 NFL_sched.update()
+
+Y_Sun5 = {}
+
+for c in division:
+    for w in week:
+        Y_Sun5[c,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'Y_Sun5_' + c + '_' + str(w))
+
+NFL_sched.update()
+
+Y_MonBeforeThurs = {}
+
+for t in teams:
+    for w in week:
+        Y_MonBeforeThurs[t,w] = NFL_sched.addVar(obj = -100000000, vtype = GRB.BINARY, name = 'Y_MonBeforeThurs_' + t + '_' + str(w))
+        
+NFL_sched.update()
+
+Y_3ConsecutiveAway = {}
+
+for h in teams:
+    for a in home_games[h]:
+        for w in week:
+            Y_3ConsecutiveAway[a,h,w] = NFL_sched.addVar(obj = 1, vtype = GRB.BINARY, name = 'Y_3ConsecutiveAway_' + a +'_'+ h + '_' + str(w))
+
+NFL_sched.update()
+
 
 # Create a dictionary to hold contraints
 myConsts = {}
@@ -224,13 +250,13 @@ NFL_sched.update()
 ####### ENHANCEMENT 1 CONSTRAINTS #######
 
 # 11 - No team plays more than two road games against teams coming off their BYE
-for a in teams:
-    for h in away_games[a]:
+for t in teams:
+    for h in away_games[t]:
         for w in range(4,12):
-            constrName = a + '_RoadGamesAgainstTeamsOffBye_' + h + '_' + str(w) 
-            myConsts[constrName] = NFL_sched.addConstr((games['BYE',h,w,'SunE'] + quicksum(games[a,h,w+1,s] for s in slots)) <= 1 + Y[a,h,w+1], name = constrName)
-    constrName = a + '_NoMoreThan2_' + h
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(Y[a,h,w+1] for h in away_games[a] for w in range(4,12)) <= 2, name = constrName)
+            constrName = t + '_RoadGamesAgainstTeamsOffBye_' + h + '_' + str(w) 
+            myConsts[constrName] = NFL_sched.addConstr((games['BYE',h,w,'SunE'] + quicksum(games[t,h,w+1,s] for s in slots)) <= 1 + Y_BYE[t,h,w+1], name = constrName)
+    constrName = t + '_NoMoreThan2_' + h
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(Y_BYE[t,h,w+1] for h in away_games[t] for w in range(4,12)) <= 2, name = constrName)
     
 NFL_sched.update()
 
@@ -352,13 +378,16 @@ for c in division:
 NFL_sched.update()
 
 # 24 - Every team must play exactly one short week game during the season.  A short week is defined as a Sunday game in week “w” and a Thursday game in week “w+1”.  As a result, two of the six teams playing on Thanksgiving Day must play against each other the following Thursday night.
-for a in teams:
-    for h in away_games[a]:
-        for w in range(1,17):
-            constrName = a + '_ShortWeek_' + h + '_' + str(w) 
-            myConsts[constrName] = NFL_sched.addConstr((quicksum(games[a,h,w,s] for s in ['SunE','SunL','SunM','SunN']) + quicksum(games[a,h,w+1,s] for s in ['ThurE','ThurL','ThurN'])) <= 1 + SW[a,h,w], name = constrName)
-    constrName = a + '_Exactly1ShortWeek_' + h
-    myConsts[constrName] = NFL_sched.addConstr(quicksum(SW[a,h,w] for h in away_games[a] for w in range(1,18)) == 1, name = constrName)
+for t in teams:
+    for w in range(1,17):
+        constrName = t + '_ShortWeek_' + '_' + str(w) 
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[t,h,w,s] for h in away_games[t] for s in ['SunE','SunL','SunM','SunN']) + 
+                                                    quicksum(games[a,t,w,s] for a in home_games[t] for s in ['SunE','SunL','SunM','SunN']) +
+                                                    quicksum(games[t,h,w+1,s] for h in away_games[t] for s in ['ThurE','ThurL','ThurN']) +
+                                                    quicksum(games[a,t,w+1,s] for a in home_games[t] for s in ['ThurE','ThurL','ThurN'])) <= 2 + Y_SW[a,h,w], name = constrName)
+    constrName = t + '_Exactly1ShortWeek'
+    myConsts[constrName] = NFL_sched.addConstr((quicksum(Y_SW[t,h,w] for h in away_games[t] for w in range(1,18))  +
+                                                quicksum(Y_SW[a,t,w] for a in home_games[t] for w in range(1,18)))== 1, name = constrName)
     
 NFL_sched.update()
 
@@ -436,22 +465,107 @@ for t in teams:
 
 NFL_sched.update()    
 
-####### ENHANCEMENT 3 CONSTRAINTS #######
+######## ENHANCEMENT 3 CONSTRAINTS #######
 # 32 - All teams playing Thursday games cannot play Monday night the previous two weeks.
-# (see #25, add w-2 as a soft constraint (penalty)) 
-# 33 - Teams cannot play at home on Stadium blackout dates.
+for t in teams:
+     for w in range(3,18):
+          constrName = t + '_NoMon2WeeksPriorToThurN_' + str(w)
+          myConsts[constrName] = NFL_sched.addConstr((quicksum(games[t,h,w,'ThurN'] for h in away_games[t]) + 
+                                                      quicksum(games[a,t,w,'ThurN'] for a in home_games[t]) +
+                                                      quicksum(games[t,h,w-1,'MonN1'] for h in away_games[t]) +
+                                                      quicksum(games[a,t,w-1,'MonN1'] for a in home_games[t]) + 
+                                                      quicksum(games[t,h,w-2,'MonN1'] for h in away_games[t]) +
+                                                      quicksum(games[a,t,w-2,'MonN1'] for a in home_games[t])) <= 1 + Y_MonBeforeThurs[t,w], name = constrName)
+
+NFL_sched.update()
+
+## 33 - Teams cannot play at home on Stadium blackout dates.
+#for h in home_blocks:
+#    for w in week:
+#        if w in dict.keys(home_blocks[h]):
+#            constrName = h + '_NotHomeOnStadiumBlock_' + str(w)
+#            myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for a in home_games[h] for s in home_blocks[h][w] if s != 'Bye') == 0, name = constrName)
+#        
+#NFL_sched.update()
+
 # 34 - CBS and FOX afternoon games will be diverse.  This is a hard one to describe, but with the exception of week 17, they shouldn’t have all games from a single division.  There should be a good distribution of games with respect to quality (on a 1, 2, 3 scale).  There should be games from different time zones in a given week for each network (FOX, CBS)
+
 # 35 - All teams must play at least 2 away/home games every 6 weeks (exclude BYE games from this constraint)
+
 # 36 - All teams must play at least 4 away/home games every 10 weeks
+
 # 37 - No team will play three consecutive away games between weeks 4 through 16 (if they do, they can only play one such set).  (Between weeks 4 and 16, a team can only play one 3 game stretch as the away team, but it is undesirable to do so.)
+for t in teams:
+    for h in away_games[t]:
+        for w in range(4,14):
+            constrName = t + '_NoThreeConsecutiveAway_' + h + '_' + str(w) 
+            myConsts[constrName] = NFL_sched.addConstr(quicksum(games[t,h,i,s] for i in range(w,w+3) for s in slots) <= 3 + Y_3ConsecutiveAway[t,h,w+3], name = constrName)
+    constrName = t + '_OneThreeConsecutiveAway_' + h
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(Y_3ConsecutiveAway[t,h,w+3] for h in away_games[t] for w in range(4,14)) <= 1, name = constrName)
+    
+NFL_sched.update()
+
 # 38 - No team plays consecutive road games involving cross-country trips (coast to coast) unless team requests it (for the purpose of this course, assume no one requested consecutive cross-country trips)
-# 39 *CUT* - Two of the four teams that played Thanksgiving day games must play Thursday the following week
+for t in teams:
+    for w in range(1,17):
+        if abs(timezones[t] - timezones[h]) == 3:
+            constrName = t + '_NoConsecutiveCrossCountry_' + str(w)
+            myConsts[constrName] = NFL_sched.addConstr((quicksum(games[t,h,w,s] for h in away_games[t] for s in slots) +
+                                                        quicksum(games[t,h,w+1,s] for h in away_games[t] for s in slots)) <= 1, name = constrName)
+                                                        
+NFL_sched.update()
+            
 # 40 - No team playing a Thursday night game should travel more than one time zone from home
+for t in teams:
+    for w in range(1,17):
+        constrName = t + '_OneTimezoneFollowingThurN_' + str(w)
+        myConsts[constrName] = NFL_sched.addConstr((quicksum(games[t,h,w,'ThurN'] for h in away_games[t]) +
+                                                    quicksum(games[a,t,w,'ThurN'] for a in home_games[t]) + 
+                                                    quicksum(games[t,h,w+1,s] for h in away_games[t] if abs(timezones[t] - timezones[h]) >= 1 for s in slots) +
+                                                    quicksum(games[a,t,w+1,s] for a in home_games[t] if a != 'BYE' if abs(timezones[t] - timezones[a]) >= 1 for s in slots)) <= 1, name = constrName)
+                                                    
+NFL_sched.update()
+
 # 41 - NYG and NYJ cannot play during the same time slot on Sunday.  This may be violated only if both teams are on the road.  The idea here is you do not want fans with tickets for one team sitting at home watching the game instead of being in the stadium.  
+for w in week:
+    for s in ['SunE','SunL','SunM','SunN']:
+        constrName = str(w) + '_NYG_NYJ_NotInSameSlotSunday_' + s
+        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for h in ['NYJ','NYG'] for a in home_games[h]) <= 1, name = constrName)
+        
+NFL_sched.update()
+
 # 42 - OAK and SF cannot play during the same time slot on Sunday.  This may be violated only if both teams are on the road.  The idea here is you do not want fans with tickets for one team sitting at home watching the game instead of being in the stadium.
+for w in week:
+    for s in ['SunE','SunL','SunM','SunN']:
+        constrName = str(w) + '_SF_OAK_NotInSameSlotSunday_' + s
+        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for h in ['SF','OAK'] for a in home_games[h]) <= 1, name = constrName)
+        
+NFL_sched.update()
+
 # 43 - CBS and FOX may have fewer than 5 games each on a Sunday once per network. 
+for c in division:
+    for w in week:
+        constrName = c + '_NotFewerThan5GamesSun_' + str(w)
+        myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,h,w,s] for a in [item for sublist in [division[c][d] for d in division[c].keys()] for item in sublist] for h in away_games[a] for s in ['SunE','SunL','SunM','SunM']) >= 5 + Y_Sun5[c,w], name = constrName)
+    constrName = c + '_FewerThan5GamesSun_OnlyOnce_'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(Y_Sun5[c,w] for w in week) == 1, name = constrName)
+
+NFL_sched.update()
+
 # 44 - No team will open the season with two away games 
+for t in teams:
+    constrName = t + '_DoNotOpenWithTwoAwayGames'
+    myConsts[constrName] = NFL_sched.addConstr((quicksum(games[t,h,1,s] for h in away_games[t] for s in slots) + 
+                                                quicksum(games[t,h,2,s] for h in away_games[t] for s in slots)) <= 2, name = constrName)
+    
+NFL_sched.update()
+
 # 45 - Florida teams should not play early home games in the month of September (this is generally a “by request” constraint).  Assume all Florida teams requested “no early games”.
+for t in FL_teams:
+    constrName = t + '_NoEarlySunInSept'
+    myConsts[constrName] = NFL_sched.addConstr(quicksum(games[a,t,w,'SunE'] for a in home_games[t] for w in range(1,5)) == 0, name = constrName)
+
+NFL_sched.update()
 
 ### END CONSTRAINTS ###
 
@@ -477,6 +591,6 @@ for h in teams:
     for a in home_games[h]:
         for w in week:
             for s in slots:
-                if games[a,h,w,s].x > 0:
+                if games[a,h,w,s].x > 0.5:
                     print a, h, w, s, games[a,h,w,s].x*team_priority[h]*team_priority[a]*week_priority[w]*slot_priority[s]
                             
